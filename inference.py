@@ -69,7 +69,7 @@ def face_detect(images):
 	detector = face_detection.FaceAlignment(face_detection.LandmarksType._2D, 
 											flip_input=False, device=device)
 
-	batch_size = args.face_det_batch_size
+	batch_size = 1  # Force batch size to 1 to avoid OOM
 	
 	while 1:
 		predictions = []
@@ -159,10 +159,10 @@ print('Using {} for inference.'.format(device))
 
 def _load(checkpoint_path):
 	if device == 'cuda':
-		checkpoint = torch.load(checkpoint_path)
+		checkpoint = torch.load(checkpoint_path, weights_only=False)
 	else:
 		checkpoint = torch.load(checkpoint_path,
-								map_location=lambda storage, loc: storage)
+								map_location=lambda storage, loc: storage, weights_only=False)
 	return checkpoint
 
 def load_model(path):
@@ -243,7 +243,7 @@ def main():
 
 	full_frames = full_frames[:len(mel_chunks)]
 
-	batch_size = args.wav2lip_batch_size
+	batch_size = 1  # Force batch size to 1 to avoid OOM
 	gen = datagen(full_frames.copy(), mel_chunks)
 
 	for i, (img_batch, mel_batch, frames, coords) in enumerate(tqdm(gen, 
@@ -253,7 +253,11 @@ def main():
 			print ("Model loaded")
 
 			frame_h, frame_w = full_frames[0].shape[:-1]
-			out = cv2.VideoWriter('temp/result.avi', 
+			temp_dir = os.path.join(os.path.dirname(__file__), 'temp')
+			if not os.path.exists(temp_dir):
+				os.makedirs(temp_dir)
+			out_path = os.path.join(temp_dir, 'result.avi')
+			out = cv2.VideoWriter(out_path, 
 									cv2.VideoWriter_fourcc(*'DIVX'), fps, (frame_w, frame_h))
 
 		img_batch = torch.FloatTensor(np.transpose(img_batch, (0, 3, 1, 2))).to(device)
@@ -273,7 +277,7 @@ def main():
 
 	out.release()
 
-	command = 'ffmpeg -y -i {} -i {} -strict -2 -q:v 1 {}'.format(args.audio, 'temp/result.avi', args.outfile)
+	command = 'ffmpeg -y -i {} -i {} -strict -2 -q:v 1 {}'.format(args.audio, out_path, args.outfile)
 	subprocess.call(command, shell=platform.system() != 'Windows')
 
 if __name__ == '__main__':
